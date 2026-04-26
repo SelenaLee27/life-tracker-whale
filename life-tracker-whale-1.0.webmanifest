@@ -1,0 +1,40 @@
+{
+  "id": "./",
+  "name": "轨迹",
+  "short_name": "轨迹",
+  "description": "本地优先的生活记录工具，支持日程、日记、记账、总结和备份。",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f6f7fd",
+  "theme_color": "#5d88ff",
+  "icons": [
+    {
+      "src": "./life-tracker-whale-1.0-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./life-tracker-whale-1.0-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "打开轨迹",
+      "short_name": "轨迹",
+      "url": "./",
+      "icons": [
+        {
+          "src": "./life-tracker-whale-1.0-icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ]
+}
