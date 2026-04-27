@@ -3248,6 +3248,10 @@
       return /^[a-z][a-z0-9]{2,}$/.test(token);
     }
 
+    function isMixedLatinPart(token) {
+      return /^[a-z][a-z0-9]{1,7}$/.test(token);
+    }
+
     function isAllWeakChineseChars(word) {
       return [...word].every((char) => STOP_SINGLE_CHARS.has(char));
     }
@@ -3329,7 +3333,7 @@
         const currentIsChinese = isChineseToken(current);
         const nextIsChinese = isChineseToken(next);
 
-        if (currentIsChinese && isEnglishLikeToken(next)) {
+        if (currentIsChinese && isMixedLatinPart(next)) {
           buildMixedCandidates(current, next, true).forEach((mixed) => {
             if (mixed.length >= 3 && mixed.length <= 16 && !DIARY_STOPWORDS.has(mixed)) {
               addKeyword(counter, mixed);
@@ -3337,7 +3341,7 @@
           });
         }
 
-        if (isEnglishLikeToken(current) && nextIsChinese) {
+        if (isMixedLatinPart(current) && nextIsChinese) {
           buildMixedCandidates(next, current, false).forEach((mixed) => {
             if (mixed.length >= 3 && mixed.length <= 16 && !DIARY_STOPWORDS.has(mixed)) {
               addKeyword(counter, mixed);
