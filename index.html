@@ -1402,7 +1402,7 @@
   <script>
     const STORAGE_KEY = "life_tracker_whale_v1";
     const APP_VERSION = "2.0.0";
-    const APP_RELEASE = "1.1.0";
+    const APP_RELEASE = "1.1.1";
     const APP_ID = "trajectory";
     // Keep the database name stable so 1.1 can read data created by 1.0.
     const DB_NAME = "life_tracker_whale_1_0";
@@ -1415,7 +1415,27 @@
     const DIARY_STOPWORDS = new Set([
       "今天", "自己", "觉得", "然后", "因为", "所以", "还是", "但是", "一个", "没有",
       "我们", "你们", "他们", "事情", "时候", "已经", "一下", "这个", "那个", "真的",
-      "有点", "比较", "有些", "继续", "如果", "为了", "还有", "可以", "一下子", "就是"
+      "有点", "比较", "有些", "继续", "如果", "为了", "还有", "可以", "一下子", "就是",
+      "的", "了", "是", "就", "也", "把", "让", "给", "和", "与", "而", "及",
+      "呢", "吧", "呀", "吗", "哦", "啊", "在", "从", "对", "向", "着", "过", "得", "地",
+      "会", "能", "要", "将", "被", "所", "以", "因", "为", "不", "没", "有",
+      "什么", "怎么", "怎样", "这么", "那么", "为什么",
+      "可能", "应该", "需要", "知道", "好像", "一样",
+      "一次", "一种", "一些", "很多", "很少",
+      "很", "非常", "更", "最", "太"
+    ]);
+    const EN_STOPWORDS = new Set([
+      "the", "and", "but", "you", "that", "this", "with", "from", "for",
+      "are", "was", "were", "have", "has", "had", "not", "they", "will", "would",
+      "feel", "felt", "really", "very", "just", "today", "because", "about", "like",
+      "some", "more", "when", "what", "which", "who", "how", "all", "can", "been"
+    ]);
+    const STOP_SINGLE_CHARS = new Set([
+      "的", "了", "是", "就", "也", "把", "让", "给", "和", "与", "而", "及",
+      "呢", "吧", "呀", "吗", "哦", "啊", "在", "从", "对", "向", "着", "过", "得",
+      "地", "会", "能", "要", "将", "被", "所", "以", "因", "为", "不", "没", "有",
+      "很", "都", "再", "又", "便", "可", "即", "但", "却", "只", "个", "我", "你",
+      "他", "她", "它", "们"
     ]);
 
     const state = {
@@ -1709,20 +1729,24 @@
     }
 
     function renderScheduleCards() {
-      const categories = getActiveScheduleCategories();
+      const allCategories = getActiveScheduleCategories();
+      const categories = allCategories.filter((category) => isScheduleCategoryExpanded(category.id));
       els.scheduleList.innerHTML = "";
-      if (!categories.length) {
+      if (!allCategories.length) {
         els.scheduleList.innerHTML = `<div class="empty-note">还没有启用的日程方向。可以先在说明里的分类设置中启用或新增方向。</div>`;
+        return;
+      }
+      if (!categories.length) {
+        els.scheduleList.innerHTML = `<div class="empty-note">点击转盘里的方向，展开对应的日程模块。可以同时展开多个方向。</div>`;
         return;
       }
 
       categories.forEach((category) => {
         const entry = getScheduleEntry(state.scheduleDate, category.id);
         const isSubmitted = !!entry?.submitted;
-        const isExpanded = isScheduleCategoryExpanded(category.id);
         const statusText = entry?.status === "done" ? "已打勾" : entry?.status === "missed" ? "已打叉" : "未标记";
         const card = document.createElement("article");
-        card.className = `schedule-card${isExpanded ? "" : " is-collapsed"}`;
+        card.className = "schedule-card";
         card.innerHTML = `
           <div class="schedule-card-header" style="background:${category.color};">
             <div>
@@ -1733,7 +1757,7 @@
               </div>
             </div>
             <div class="actions">
-              <button class="ghost-btn" data-schedule-toggle="${category.id}">${isExpanded ? "收起" : "展开"}</button>
+              <button class="ghost-btn" data-schedule-toggle="${category.id}">收起</button>
             </div>
           </div>
           <div class="schedule-card-body">
@@ -3216,35 +3240,149 @@
       return record.categoryName || findCategory("expenseCategories", record.categoryId)?.name || "未分类";
     }
 
+    function isChineseToken(token) {
+      return /^[\u4e00-\u9fa5]+$/.test(token);
+    }
+
+    function isEnglishLikeToken(token) {
+      return /^[a-z][a-z0-9]{2,}$/.test(token);
+    }
+
+    function isAllWeakChineseChars(word) {
+      return [...word].every((char) => STOP_SINGLE_CHARS.has(char));
+    }
+
+    function hasWeakChineseEdge(word) {
+      return STOP_SINGLE_CHARS.has(word[0]) || STOP_SINGLE_CHARS.has(word[word.length - 1]);
+    }
+
+    function isBadChineseWord(word) {
+      if (DIARY_STOPWORDS.has(word)) return true;
+      if (isAllWeakChineseChars(word)) return true;
+
+      if (word.length <= 3 && STOP_SINGLE_CHARS.has(word[0]) && STOP_SINGLE_CHARS.has(word[word.length - 1])) {
+        return true;
+      }
+
+      return false;
+    }
+
+    function buildMixedCandidates(chinesePart, latinPart, chineseFirst) {
+      const candidates = [];
+
+      if (chineseFirst) {
+        for (let size = Math.min(4, chinesePart.length); size >= 1; size -= 1) {
+          const chinese = chinesePart.slice(-size);
+          if (!hasWeakChineseEdge(chinese) && !isBadChineseWord(chinese)) {
+            candidates.push((chinese + latinPart).toLowerCase());
+          }
+        }
+      } else {
+        for (let size = Math.min(4, chinesePart.length); size >= 1; size -= 1) {
+          const chinese = chinesePart.slice(0, size);
+          if (!hasWeakChineseEdge(chinese) && !isBadChineseWord(chinese)) {
+            candidates.push((latinPart + chinese).toLowerCase());
+          }
+        }
+      }
+
+      return candidates;
+    }
+
     function extractDiaryKeywords(text) {
       const counter = new Map();
-      const normalized = String(text || "").replace(/[\r\n]+/g, " ");
-      const englishWords = normalized.toLowerCase().match(/[a-z]{3,12}/g) || [];
-      englishWords.forEach((word) => addKeyword(counter, word));
-      const mixedWords = normalized.match(/(?:[\u4e00-\u9fa5]{1,4}[A-Za-z0-9]{1,8}|[A-Za-z0-9]{1,8}[\u4e00-\u9fa5]{1,4})/g) || [];
-      mixedWords.forEach((word) => addKeyword(counter, word.toLowerCase()));
-      const chineseChunks = normalized.match(/[\u4e00-\u9fa5]{2,}/g) || [];
-      chineseChunks.forEach((chunk) => {
-        for (let size = 4; size >= 2; size -= 1) {
-          for (let index = 0; index <= chunk.length - size; index += 1) {
-            const word = chunk.slice(index, index + size);
-            if (DIARY_STOPWORDS.has(word)) continue;
-            if (/^[的是了一我你他她们就都很再还也又把让给与和而及呢吧呀吗哦啊]+$/.test(word)) continue;
-            addKeyword(counter, word);
-          }
+      const normalized = String(text || "").toLowerCase().replace(/[\r\n]+/g, " ");
+      const rawTokens = normalized.match(/[a-z0-9]+|[\u4e00-\u9fa5]+/g) || [];
+
+      rawTokens.forEach((token) => {
+        if (isEnglishLikeToken(token) && !DIARY_STOPWORDS.has(token) && !EN_STOPWORDS.has(token)) {
+          addKeyword(counter, token);
         }
       });
 
+      for (let index = 0; index < rawTokens.length; index += 1) {
+        const token = rawTokens[index];
+        if (!isChineseToken(token)) continue;
+
+        let chineseChain = token;
+        let cursor = index + 1;
+        while (cursor < rawTokens.length && isChineseToken(rawTokens[cursor])) {
+          chineseChain += rawTokens[cursor];
+          cursor += 1;
+        }
+
+        for (let size = 4; size >= 2; size -= 1) {
+          for (let offset = 0; offset <= chineseChain.length - size; offset += 1) {
+            const word = chineseChain.slice(offset, offset + size);
+            if (!isBadChineseWord(word)) {
+              addKeyword(counter, word);
+            }
+          }
+        }
+
+        index = cursor - 1;
+      }
+
+      for (let index = 0; index < rawTokens.length - 1; index += 1) {
+        const current = rawTokens[index];
+        const next = rawTokens[index + 1];
+        const currentIsChinese = isChineseToken(current);
+        const nextIsChinese = isChineseToken(next);
+
+        if (currentIsChinese && isEnglishLikeToken(next)) {
+          buildMixedCandidates(current, next, true).forEach((mixed) => {
+            if (mixed.length >= 3 && mixed.length <= 16 && !DIARY_STOPWORDS.has(mixed)) {
+              addKeyword(counter, mixed);
+            }
+          });
+        }
+
+        if (isEnglishLikeToken(current) && nextIsChinese) {
+          buildMixedCandidates(next, current, false).forEach((mixed) => {
+            if (mixed.length >= 3 && mixed.length <= 16 && !DIARY_STOPWORDS.has(mixed)) {
+              addKeyword(counter, mixed);
+            }
+          });
+        }
+      }
+
+      for (let index = 0; index < rawTokens.length - 1; index += 1) {
+        const current = rawTokens[index];
+        const next = rawTokens[index + 1];
+        if (
+          /^[a-z]+$/.test(current) &&
+          /^[a-z]+$/.test(next) &&
+          current.length >= 3 &&
+          next.length >= 3 &&
+          !EN_STOPWORDS.has(current) &&
+          !EN_STOPWORDS.has(next)
+        ) {
+          const bigram = `${current} ${next}`;
+          if (!DIARY_STOPWORDS.has(bigram)) {
+            addKeyword(counter, bigram);
+          }
+        }
+      }
+
       const candidates = [...counter.entries()]
         .filter(([word, count]) => count >= 2 && word.trim().length >= 2)
-        .sort((a, b) => b[0].length - a[0].length || b[1] - a[1] || a[0].localeCompare(b[0]))
+        .sort((a, b) => b[1] - a[1] || b[0].length - a[0].length || a[0].localeCompare(b[0]))
         .map(([word, count]) => ({ word, count }));
 
       const selected = [];
       candidates.forEach((candidate) => {
-        const overlaps = selected.some((item) => item.word.includes(candidate.word) || candidate.word.includes(item.word));
-        if (!overlaps) selected.push(candidate);
+        const blockedBySelected = selected.some((item) => item.word.includes(candidate.word) && item.count >= candidate.count);
+        if (blockedBySelected) return;
+
+        for (let index = selected.length - 1; index >= 0; index -= 1) {
+          if (candidate.word.includes(selected[index].word) && candidate.count >= selected[index].count) {
+            selected.splice(index, 1);
+          }
+        }
+
+        selected.push(candidate);
       });
+
       return selected.sort((a, b) => b.count - a.count || b.word.length - a.word.length);
     }
 
