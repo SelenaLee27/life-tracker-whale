@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "life-tracker-whale-";
-const CACHE_NAME = "life-tracker-whale-1.1.1";
+const CACHE_NAME = "life-tracker-whale-1.1.2";
 const APP_SHELL = [
   "./",
   "./index.html",
